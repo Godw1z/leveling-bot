@@ -52,74 +52,99 @@ def build_rank_embed(member: discord.Member, guild: discord.Guild) -> discord.Em
     """Build the embed shown by the rank command."""
     user = database.get_user(member.id, guild.id)
     rank_position = database.get_rank(member.id, guild.id)
-    xp_needed = database.xp_for_level(user["level"] + 1)
+    level = user["level"]
+    xp = user["xp"]
+    xp_needed = database.xp_for_level(level + 1)
 
+    # Progress bar
+    progress = xp / xp_needed if xp_needed > 0 else 0
+    bar_length = 10
+    filled = int(bar_length * progress)
+    bar = "█" * filled + "░" * (bar_length - filled)
 
     embed = discord.Embed(
-        title=f"{member.display_name}'s Rank",
+        title="📈 User Rank",
+        description=f"{member.mention} • {member.display_name}",
         color=discord.Color.blurple(),
     )
     embed.set_thumbnail(url=member.display_avatar.url)
-    embed.add_field(name="Level", value=str(user["level"]), inline=True)
-    embed.add_field(name="XP", value=f"{user['xp']} / {xp_needed}", inline=True)
-    embed.add_field(name="Server Rank", value=f"#{rank_position}", inline=True)
-    return embed
 
+    embed.add_field(
+        name="Level",
+        value=f"**{level}**",
+        inline=True,
+    )
+    embed.add_field(
+        name="XP Progress",
+        value=f"`{bar}`\n{xp} / {xp_needed} XP",
+        inline=True,
+    )
+    embed.add_field(
+        name="Server Rank",
+        value=f"**#{rank_position}**",
+        inline=True,
+    )
+
+    embed.set_footer(
+        text=f"User ID: {member.id}",
+        icon_url=member.display_avatar.url,
+    )
+
+    return embed
 
 
 def build_leaderboard_embed(guild: discord.Guild) -> discord.Embed | str:
     """Build the embed for the leaderboard, or a plain string if nobody has XP yet."""
     entries = database.get_leaderboard(guild.id)
 
-
     if not entries:
         return "No one has earned XP yet."
-
 
     lines = []
     medals = ("🥇", "🥈", "🥉")
 
-
     for index, entry in enumerate(entries, start=1):
         member = guild.get_member(entry["user_id"])
-        name = member.display_name if member else f"User {entry['user_id']}"
-        prefix = medals[index - 1] if index <= 3 else f"**{index}.**"
-        lines.append(f"{prefix} {name} — Level {entry['level']} ({entry['xp']} XP)")
+        name = member.display_name if member else f"Unknown User"
+        prefix = medals[index - 1] if index <= 3 else f"{index}."
+        lines.append(
+            f"{prefix} **{name}** — Level **{entry['level']}** • {entry['xp']} XP"
+        )
 
-
-    return discord.Embed(
-        title=f"{guild.name} Leaderboard",
+    embed = discord.Embed(
+        title="🏆 Server Leaderboard",
         description="\n".join(lines),
         color=discord.Color.gold(),
     )
+    embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
+    embed.set_footer(text="Top members by XP")
 
+    return embed
 
 
 def build_help_embed() -> discord.Embed:
     """
-    Build the help embed by reading every registered command on the bot.
-
+    Build the embed by reading every registered command on the bot.
 
     To add a new command later:
       1. Create a @bot.hybrid_command with a `help="..."` description.
       2. It will automatically appear here — no manual list to update.
     """
     embed = discord.Embed(
-        title="Leveling Bot — Command Help",
+        title="🤖 Leveling Bot — Command List",
         description=(
             f"**Prefix:** `{PREFIX} <command>`\n"
             f"**Slash:** `/<command>`\n\n"
-            "Earn XP by chatting (60-second cooldown between gains)."
+            f"Earn XP by chatting (60‑second cooldown between gains).\n"
+            f"Use commands like `{PREFIX} rank`, `{PREFIX} leaderboard`, and more."
         ),
         color=discord.Color.blurple(),
     )
-
 
     # Sort commands alphabetically for a consistent help menu.
     for command in sorted(bot.commands, key=lambda cmd: cmd.name):
         if command.hidden:
             continue
-
 
         description = command.help or "No description provided."
         embed.add_field(
@@ -128,10 +153,12 @@ def build_help_embed() -> discord.Embed:
             inline=False,
         )
 
+    embed.set_footer(
+        text="Tip: hybrid commands work with both prefix and slash.",
+        icon_url=bot.user.display_avatar.url if bot.user else None,
+    )
 
-    embed.set_footer(text="Tip: hybrid commands work with both prefix and slash.")
     return embed
-
 
 
 # ---------------------------------------------------------------------------
@@ -156,27 +183,29 @@ async def on_ready():
     print("Slash commands synced.")
 
 
-
 @bot.event
 async def on_message(message: discord.Message):
     """Award XP for messages and route prefix commands (e.g. g help)."""
     if message.author.bot or message.guild is None:
         return
 
-
     xp_gain = random.randint(15, 25)
     result = database.try_add_xp(message.author.id, message.guild.id, xp_gain)
 
-
     if result and result["leveled_up"]:
-        await message.channel.send(
-            f"GG {message.author.mention}, you reached level **{result['level']}**!"
+        embed = discord.Embed(
+            title="🎉 Level Up!",
+            description=(
+                f"GG {message.author.mention}!\n"
+                f"You reached **level {result['level']}**!"
+            ),
+            color=discord.Color.green(),
         )
-
+        embed.set_thumbnail(url=message.author.display_avatar.url)
+        await message.channel.send(embed=embed)
 
     # Required so prefix commands like `g help` are processed.
     await bot.process_commands(message)
-
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +227,6 @@ async def help_command(ctx: commands.Context):
     await ctx.send(embed=build_help_embed())
 
 
-
 @bot.hybrid_command(
     name="rank",
     help="View your XP, level, and server rank.",
@@ -208,7 +236,6 @@ async def help_command(ctx: commands.Context):
 async def rank(ctx: commands.Context, member: discord.Member | None = None):
     target = member or ctx.author
     await ctx.send(embed=build_rank_embed(target, ctx.guild))
-
 
 
 @bot.hybrid_command(
@@ -222,7 +249,6 @@ async def leaderboard(ctx: commands.Context):
         await ctx.send(response)
     else:
         await ctx.send(embed=response)
-
 
 
 # ---------------------------------------------------------------------------

@@ -4,8 +4,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-import database
-
 
 # ---------------------------------------------------------------------------
 # Helpers: embed builders
@@ -120,17 +118,13 @@ class Moderation(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    # -----------------------------------------------------------------------
-    # Commands
-    # -----------------------------------------------------------------------
-
     @commands.hybrid_command(
         name="warn",
         help="Warn a member for breaking the rules.",
         description="Warn a member for breaking the rules.",
     )
     @app_commands.describe(member="The member to warn", reason="Reason for the warning")
-    async def warn(self, ctx: commands.Context, member: discord.Member, *, reason: str | None = None):
+    async def warn_cmd(self, ctx: commands.Context, member: discord.Member, *, reason: str | None = None):
         if not ctx.author.guild_permissions.moderate_members:
             await ctx.send("You don't have permission to warn members.", ephemeral=True)
             return
@@ -147,7 +141,14 @@ class Moderation(commands.Cog):
         duration="Duration (e.g. 10m, 1h, 1d)",
         reason="Reason for the timeout",
     )
-    async def timeout(self, ctx: commands.Context, member: discord.Member, duration: str, *, reason: str | None = None):
+    async def timeout_cmd(
+        self,
+        ctx: commands.Context,
+        member: discord.Member,
+        duration: str,
+        *,
+        reason: str | None = None,
+    ):
         if not ctx.author.guild_permissions.moderate_members:
             await ctx.send("You don't have permission to timeout members.", ephemeral=True)
             return
@@ -178,7 +179,7 @@ class Moderation(commands.Cog):
         description="Kick a member from the server.",
     )
     @app_commands.describe(member="The member to kick", reason="Reason for the kick")
-    async def kick(self, ctx: commands.Context, member: discord.Member, *, reason: str | None = None):
+    async def kick_cmd(self, ctx: commands.Context, member: discord.Member, *, reason: str | None = None):
         if not ctx.author.guild_permissions.kick_members:
             await ctx.send("You don't have permission to kick members.", ephemeral=True)
             return
@@ -192,7 +193,7 @@ class Moderation(commands.Cog):
         description="Ban a member from the server.",
     )
     @app_commands.describe(member="The member to ban", reason="Reason for the ban")
-    async def ban(self, ctx: commands.Context, member: discord.Member, *, reason: str | None = None):
+    async def ban_cmd(self, ctx: commands.Context, member: discord.Member, *, reason: str | None = None):
         if not ctx.author.guild_permissions.ban_members:
             await ctx.send("You don't have permission to ban members.", ephemeral=True)
             return
@@ -206,7 +207,7 @@ class Moderation(commands.Cog):
         description="Clear a number of messages in this channel.",
     )
     @app_commands.describe(amount="Number of messages to delete (1–100)")
-    async def clear(self, ctx: commands.Context, amount: int):
+    async def clear_cmd(self, ctx: commands.Context, amount: int):
         if not ctx.author.guild_permissions.manage_messages:
             await ctx.send("You don't have permission to clear messages.", ephemeral=True)
             return
